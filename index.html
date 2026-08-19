@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Review prep — vLLM ROCm perf PRs</title>
+<style>
+  :root {
+    --bg: #101418;
+    --surface: #171c22;
+    --surface-2: #1d242c;
+    --border: #2a323c;
+    --text: #e6ebf0;
+    --text-2: #9aa7b4;
+    --text-3: #6b7885;
+    --accent: #4ea1f3;
+    --green: #3fb96a;
+    --red: #e5645f;
+    --amber: #d9a03f;
+    --mono: ui-monospace, SFMono-Regular, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 15px/1.6 -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 32px 20px 80px; }
+  h1 { font-size: 24px; margin: 0 0 4px; }
+  h2 { font-size: 19px; margin: 36px 0 12px; }
+  h3 { font-size: 16px; margin: 28px 0 10px; }
+  .sub { color: var(--text-2); margin: 0 0 24px; }
+  code {
+    font-family: var(--mono); font-size: 0.9em;
+    background: var(--surface-2); border-radius: 4px; padding: 1px 5px;
+  }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  .tabs { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 28px; }
+  .tab {
+    border: 1px solid var(--border); border-radius: 999px;
+    background: transparent; color: var(--text-2);
+    padding: 5px 14px; font-size: 13px; cursor: pointer;
+  }
+  .tab:hover { color: var(--text); }
+  .tab.active { background: var(--accent); border-color: var(--accent); color: #0d1117; font-weight: 600; }
+  .panel { display: none; }
+  .panel.active { display: block; }
+
+  .pills { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 6px 0 18px; }
+  .pill {
+    font-size: 12px; color: var(--text-2);
+    border: 1px solid var(--border); border-radius: 999px; padding: 2px 10px;
+  }
+
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; margin: 20px 0; }
+  .stat { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; }
+  .stat .v { font-size: 22px; font-weight: 700; }
+  .stat .v.good { color: var(--green); }
+  .stat .v.bad { color: var(--red); }
+  .stat .l { font-size: 12px; color: var(--text-3); margin-top: 2px; }
+
+  table { width: 100%; border-collapse: collapse; margin: 12px 0 20px; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { color: var(--text-3); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; }
+  tr:last-child td { border-bottom: none; }
+  .table-frame { border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  td.ok { color: var(--green); font-weight: 600; white-space: nowrap; }
+  td.gap { color: var(--red); font-weight: 600; white-space: nowrap; }
+  td.muted { color: var(--text-2); }
+
+  details {
+    border-bottom: 1px solid var(--border);
+    padding: 2px 0;
+  }
+  details:last-of-type { border-bottom: none; }
+  summary {
+    cursor: pointer; padding: 10px 4px; font-weight: 600; list-style: none;
+    display: flex; justify-content: space-between; gap: 16px; align-items: baseline;
+  }
+  summary::before { content: "▸"; color: var(--text-3); margin-right: 8px; }
+  details[open] summary::before { content: "▾"; }
+  summary .lk { font-size: 12px; font-weight: 400; color: var(--text-3); white-space: nowrap; }
+  summary .lk.hot { color: var(--amber); }
+  .answer { padding: 0 4px 14px 22px; color: var(--text); }
+  .answer .push { color: var(--text-2); font-style: italic; font-size: 14px; margin-top: 8px; }
+  .qa-box { border: 1px solid var(--border); border-radius: 8px; padding: 4px 14px; background: var(--surface); }
+
+  .callout {
+    border-left: 3px solid var(--amber);
+    background: var(--surface); border-radius: 0 8px 8px 0;
+    padding: 12px 16px; margin: 20px 0;
+  }
+  .callout.info { border-left-color: var(--accent); }
+  .callout b { display: block; margin-bottom: 4px; }
+
+  .finding { margin: 0 0 14px; }
+  .finding b { color: var(--text); }
+  .simple p { margin: 0 0 12px; }
+  .footer { margin-top: 48px; color: var(--text-3); font-size: 12px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>Review prep — vLLM ROCm perf PRs</h1>
+<p class="sub">Anticipated reviewer questions with suggested answers for PRs
+<a href="https://github.com/vllm-project/vllm/pull/50535">50535</a>,
+<a href="https://github.com/vllm-project/vllm/pull/51309">51309</a>,
+<a href="https://github.com/vllm-project/vllm/pull/51314">51314</a>,
+<a href="https://github.com/vllm-project/vllm/pull/51315">51315</a>
+(author amd-sriram).</p>
+
+<div class="tabs">
+  <button class="tab active" data-tab="overview">Overview &amp; cross-PR</button>
+  <button class="tab" data-tab="p50535">PR 50535 · Router GEMM</button>
+  <button class="tab" data-tab="p51309">PR 51309 · Index remap</button>
+  <button class="tab" data-tab="p51314">PR 51314 · Skip logits fill</button>
+  <button class="tab" data-tab="p51315">PR 51315 · Fused indexer prologue</button>
+</div>
+
+<!-- ============================================================ OVERVIEW -->
+<section class="panel active" id="overview">
+
+<div class="stats">
+  <div class="stat"><div class="v good">+3.1%</div><div class="l">50535 · output throughput (geomean, 16 pts)</div></div>
+  <div class="stat"><div class="v good">-73%</div><div class="l">51309 · remap launches and GPU time</div></div>
+  <div class="stat"><div class="v good">18,162 → 0</div><div class="l">51314 · fp32 fill launches per capture</div></div>
+  <div class="stat"><div class="v good">4 → 1</div><div class="l">51315 · indexer prologue kernel launches</div></div>
+</div>
+
+<h3>The four PRs at a glance</h3>
+<div class="table-frame"><table>
+  <tr><th>PR</th><th>Title</th><th>Diff</th><th>Headline result</th><th>Risk profile</th></tr>
+  <tr><td><b>50535</b></td><td>Use AITER tuned GEMM for the MoE router gate</td><td>+212 / -6</td><td>+3.1% throughput, -3.0% TPOT (MI355X, GLM-5.2)</td><td class="muted">Numerics change (bf16 compute) — defended by 3-layer test suite</td></tr>
+  <tr><td><b>51309</b></td><td>Skip redundant sparse index remap on non-indexer layers</td><td>+168 / -13</td><td>Remap launches -73%; +0.6% throughput</td><td class="muted">Bit-identical by construction; gate logic is the only risk</td></tr>
+  <tr><td><b>51314</b></td><td>Skip cleaning sparse prefill MQA logits</td><td>+64 / -1</td><td>TTFT -1.1% geomean at ISL 8k; fill kernel eliminated</td><td class="muted">Bit-identical; relies on AITER read-range guarantee</td></tr>
+  <tr><td><b>51315</b></td><td>Fuse the DSA indexer prologue with AITER</td><td>+288 / -12</td><td>Prologue 4 kernels → 1; +0.7% throughput, -0.7% TPOT</td><td class="muted">Numerics within one fp8 code; prefill kernel 65% slower (net win)</td></tr>
+</table></div>
+<p class="muted" style="color:var(--text-3);font-size:12px">Source: PR descriptions and diffs, vllm-project/vllm, fetched Aug 19. All e2e numbers: MI355X TP4, amd/GLM-5.2-MXFP4, baseline = same image with only that PR reverted.</p>
+
+<h3>One-line story for the meeting</h3>
+<p>Four independent, individually-reverted ROCm optimizations for the GLM-5.2 sparse-MLA
+serving path on MI355X: one makes the MoE router gate hit AITER's tuned bf16 GEMM instead
+of falling to an untuned fp32 matmul, one fuses the four-kernel DSA indexer prologue into a
+single AITER launch, and two remove provably-redundant GPU work (a per-layer index remap
+and a per-kernel buffer fill) without changing a single output value.</p>
+
+<h3>Shared e2e test conditions — what they cover and what they miss</h3>
+<p style="color:var(--text-3);font-size:13px">All four PRs use the identical harness (added after Fangzhou-Ai's review request):
+MI355X TP4, amd/GLM-5.2-MXFP4, <code>vllm bench serve</code> on a random dataset,
+lm_eval gsm8k + RULER niah_single_2, baseline = same image with only that PR reverted.</p>
+<div class="table-frame"><table>
+  <tr><th>Dimension</th><th>Covered</th><th>Not covered</th></tr>
+  <tr><td>Hardware / parallelism</td><td>MI355X (gfx950), TP=4</td><td class="muted">gfx942/MI300X (51314 even has a gfx942 branch), TP=1/8, expert parallel</td></tr>
+  <tr><td>Model / cache</td><td>GLM-5.2 MXFP4 with fp8 KV cache</td><td class="muted">DeepSeek-V3 and Kimi-K2 (50535 explicitly targets their gate shapes), bf16 KV cache</td></tr>
+  <tr><td>Workload</td><td>Random dataset, ISL 1024 + 8192, OSL 1024, concurrency 1–256 (16 points)</td><td class="muted">Real-text datasets, longer outputs, prefix caching (explicitly disabled), speculative decoding (relevant to 51309's gate)</td></tr>
+  <tr><td>Server config</td><td>Async scheduling, index_topk_freq=4</td><td class="muted">Default index_topk_freq=1 e2e (unit-tested only), non-async scheduling</td></tr>
+  <tr><td>Accuracy method</td><td>gsm8k 5-shot + RULER niah at 16k, checkpoint sampling</td><td class="muted">Greedy decoding (would prove bit-exactness for 51309/51314), repeated runs with error bars</td></tr>
+  <tr><td>Baseline discipline</td><td>Same image with only the PR reverted — clean per-PR attribution</td><td class="muted">—</td></tr>
+</table></div>
+
+<h3>Critical findings across the four PRs</h3>
+<p class="finding"><b>1. 50535 silently downgrades fp32-forced router compute to bf16 on ROCm.</b>
+When <code>force_fp32_compute</code> is set and the AITER gate is on, weights are stored bf16 and the
+output rounds through bf16 — and the gate is platform-level, not shape-level, so a future MoE model
+with an untuned gate shape gets an untuned bf16 GEMM where it previously got fp32 F.linear.
+Defended for the three known shapes; undefended for unknown ones.</p>
+<p class="finding"><b>2. 51314 calls a new AITER kwarg with no guard.</b>
+An AITER build older than the pin raises TypeError at runtime. 51315 shows the right pattern in the
+same stack (ImportError → None → gate off); the inconsistency is easy for a reviewer to spot, so
+offer to align them.</p>
+<p class="finding"><b>3. 51309's safety rests on an unasserted invariant.</b>
+If any model ever had layer 0 without an indexer, skipped layers would consume uninitialized
+<code>paged_kv_indices</code> — silent garbage attention, no error. A one-line assert closes it.</p>
+<p class="finding"><b>4. 51315's prefill regression is real and unguarded.</b>
++65% on the prefill prologue kernel is a workload-dependent bet: net positive on the measured
+serving sweep, but a prefill-heavy or offline-batch deployment could regress with no off-switch
+besides the env flag.</p>
+<p class="finding"><b>5. The accuracy methodology cannot support the "unchanged" claims as stated.</b>
+Sampling at temperature 1.0 produces deltas that exceed the quoted spreads (51314's RULER -0.032 vs
+a stated ±0.02). For the bit-identical PRs (51309, 51314) a single greedy run would prove exact
+equality — a stronger claim for less compute.</p>
+<p class="finding"><b>6. Zero upstream regression protection.</b>
+Every new test skips without ROCm (+AITER, +gfx950), so upstream CI runs none of them, and the
+51309/51314 unit tests are wiring-level (heavily mocked) — they would pass even if the underlying
+kernels misbehaved. Correctness genuinely rests on AITER's own tests plus the e2e accuracy runs.</p>
+
+<h3>Cross-PR questions to expect</h3>
+<div class="qa-box">
+  <details><summary>All four PRs are measured on one model (GLM-5.2) and one machine (MI355X). How general are they? <span class="lk hot">very likely</span></summary>
+    <div class="answer">50535 is the most general: its tuned shapes cover the GLM-5/5.2, DeepSeek-V3 and Kimi-K2 routers, and the tier is gated so every other configuration is untouched. 51309 and 51314 live on the ROCm sparse-indexer path, which today means GLM-5.2-class sparse MLA models on gfx950 — that is the intended scope, and everything outside it is provably unchanged (gates fall back to the old code path).</div>
+  </details>
+  <details><summary>None of the new tests run in upstream CI. What is the verification story? <span class="lk hot">very likely</span></summary>
+    <div class="answer">All test files skip cleanly without ROCm (+AITER, +gfx950 for the GEMM), which is the standard pattern for ROCm-only kernels in vLLM. They pass locally on gfx950 (e.g. 81/81 for the router GEMM), and each PR carries a full A/B e2e sweep — same image with only that PR reverted — plus accuracy. AMD-side ROCm CI can run them; happy to coordinate adding them to the ROCm test list.</div>
+  </details>
+  <details><summary>Why measure accuracy at temperature 1.0 instead of greedy? <span class="lk">likely</span></summary>
+    <div class="answer">It is the checkpoint's default sampling, so it reflects what users run; the cost is ±0.006 gsm8k and ±0.02 niah run-to-run noise, which is why every PR quotes deltas against that spread. For the two PRs that are bit-identical by construction (51309, 51314) greedy would show exactly zero; can rerun greedy if the reviewer wants that on record.</div>
+  </details>
+  <details><summary>Why four separate PRs instead of one? <span class="lk">possible</span></summary>
+    <div class="answer">They touch independent subsystems (MoE router gate, sparse MLA remap, sparse prefill logits, indexer prologue), each is individually revertible, and each has its own reverted-baseline A/B so the attribution of every percentage point is clean.</div>
+  </details>
+  <details><summary>The branches were force-pushed dozens of times. Is the history reviewable? <span class="lk">possible</span></summary>
+    <div class="answer">Each PR is kept as a single clean commit rebased on main; vLLM squash-merges anyway, so the force pushes are rebases, not hidden changes. The final diff is small in all cases (+212/-6, +168/-13, +64/-1, +288/-12).</div>
+  </details>
+</div>
+
+<div class="callout info"><b>Sharpest cross-PR question in the room</b>
+The RULER 0.870 → 0.838 delta on 51314 exceeds the stated ±0.02 run-to-run spread. Own it before
+they raise it: sampling at temperature 1.0, gsm8k moved up in the same run, sibling PRs show niah
+swinging both directions, and the change is mechanically incapable of altering outputs (it skips
+writing memory that is never read). Offer a greedy rerun.</div>
+
+</section>
+
+<!-- ============================================================ PR 50535 -->
+<section class="panel" id="p50535">
+<h2>PR 50535 — Use AITER tuned GEMM for the MoE router gate</h2>
+<div class="pills"><span class="pill">+212 / -6 in 2 files</span><span class="pill">rocm</span>
+<a href="https://github.com/vllm-project/vllm/pull/50535">github.com/vllm-project/vllm/pull/50535</a></div>
+
+<h3>What it does, in simple words</h3>
+<div class="simple">
+<p>The MoE router gate is a tiny "traffic director" matmul that scores every expert for every token.
+vLLM already had a fast bf16-in, fp32-out path for it, but only on NVIDIA Hopper/Blackwell. On ROCm
+the gate first upcast its input to fp32; AITER has no fp32 tuned kernels for these shapes, so it
+silently fell through to a generic slow matmul.</p>
+<p>This PR keeps the input in bf16 so AITER's tuned GEMM actually dispatches, and moves the fp32
+cast to after the GEMM where it only touches the tiny output. It also keeps the gate weights in
+bf16 when <code>force_fp32_compute</code> is set (fp32 weights would silently disable the tuned
+path), and wraps the call in a custom op so torch.compile does not trace AITER's config lookup.</p>
+</div>
+
+<div class="stats">
+  <div class="stat"><div class="v good">+3.1%</div><div class="l">Output throughput (geomean, 16 cases)</div></div>
+  <div class="stat"><div class="v good">-3.0%</div><div class="l">TPOT (geomean)</div></div>
+  <div class="stat"><div class="v">81/81</div><div class="l">Kernel tests pass on gfx950</div></div>
+  <div class="stat"><div class="v">8.8e-3</div><div class="l">Measured worst error vs peak logit</div></div>
+</div>
+
+<h3>Anticipated reviewer questions</h3>
+<div class="qa-box">
+  <details><summary>Why cast the output to fp32 after the GEMM instead of asking AITER for fp32 output directly? <span class="lk hot">very likely</span></summary>
+    <div class="answer">AITER keys its tuned-config table on output dtype as well as shape, and it only ships bf16-output entries for the gate shapes. Requesting fp32 out misses the table and falls back to an untuned kernel — which is exactly the slow path this PR removes. The cast now applies only to the tiny num_tokens × num_experts output instead of the full hidden-size input, so it is nearly free.</div>
+  </details>
+  <details><summary>force_fp32_compute exists to protect router accuracy. Keeping weights in bf16 on ROCm defeats its purpose, no? <span class="lk hot">very likely</span></summary>
+    <div class="answer">The fp32 fallback it replaces also had bf16-representable operands — checkpoint weights are bf16, and upcasting them adds no information. The real numeric differences are the split-K reduction in the tuned kernel and the bf16 rounding of the output. Measured worst-case error is 8.8e-3 relative to the peak logit; the tests assert 2e-2 with 2x headroom, and gsm8k / RULER are unchanged within one standard error end to end.
+    <div class="push">If pushed: the top-k consistency test shows expert selection only ever differs on genuine ties inside the kernel's own error window — so routing decisions, which are all the gate output feeds, are effectively unchanged.</div></div>
+  </details>
+  <details><summary>is_tgemm_enabled() is a platform-level gate. What if a model's gate shape has no tuned entry in AITER's table? <span class="lk">likely</span></summary>
+    <div class="answer">tgemm.mm itself falls back to an untuned solution for shapes missing from the table, so it still computes correctly — just without the speedup, and with bf16 rather than fp32 compute. The three shapes that matter today (GLM-5/5.2, DeepSeek-V3, Kimi-K2 routers) are all tuned and all tested.
+    <div class="push">If pushed: a per-shape eligibility check would be a reasonable follow-up if we want fp32-fallback semantics preserved for unknown shapes; today the gate is platform + weight-dtype only.</div></div>
+  </details>
+  <details><summary>Why wrap the call in a custom op (direct_register_custom_op)? <span class="lk">likely</span></summary>
+    <div class="answer">torch.compile would otherwise trace into AITER's tuned-config lookup, which is data-dependent Python, and specialize on it. Registering the op with a fake impl keeps the lookup opaque to the compiler while shapes and dtypes still flow through graph capture correctly.</div>
+  </details>
+  <details><summary>Why was AITER falling back to aten::mm before this change? <span class="lk">possible</span></summary>
+    <div class="answer">The gate upcast its input to fp32 on the CPU side before the multiply. AITER was invoked, but with fp32 operands it found no tuned kernel and fell through to aten::linear → matmul → mm. Keeping the input in bf16 is what lets the tuned dispatch hit.</div>
+  </details>
+  <details><summary>Unit tests only go to M=128, but the router sees prefill batches up to max_num_batched_tokens (16k). Why? <span class="lk">likely</span></summary>
+    <div class="answer">The unit shapes target the latency-sensitive decode regime where the gate is skinniest and error is easiest to reason about. Large-M behavior is exercised by the e2e sweep at ISL 8192 with 16k batched tokens, where accuracy was unchanged. Extending NUM_TOKENS upward in the unit test is a cheap follow-up if wanted.</div>
+  </details>
+  <details><summary>What happens with bias, or non-bf16 checkpoint weights? <span class="lk">possible</span></summary>
+    <div class="answer">Both are excluded by construction: the tier requires no bias (same restriction as the cuBLAS tier) and allow_aiter_router_gemm additionally checks weight.dtype == bf16 after init. Anything else falls through to the existing F.linear tier, byte-for-byte the old behavior.</div>
+  </details>
+</div>
+
+<div class="callout"><b>Weak spots — acknowledge these proactively</b>
+This is the only PR of the four that changes numerics: the gate output now carries bf16 precision
+even when out_dtype is fp32. The defense is layered — fp64-reference tolerance, a top-k tie-window
+test proving routing is stable, direct comparison against the fp32 fallback, and unchanged e2e
+accuracy. Also acknowledge: the unit tests exercise the custom op directly rather than GateLinear's
+tier dispatch, and nothing runs in upstream CI without a gfx950 runner.</div>
+
+<h3>Test coverage</h3>
+<div class="table-frame"><table>
+  <tr><th>Area</th><th>Status</th><th>Notes</th></tr>
+  <tr><td>Numerical agreement vs fp64 reference</td><td class="ok">Covered</td><td class="muted">3 router shapes × M in 1..128 × fp32/bf16 out; peak-normalized tolerance</td></tr>
+  <tr><td>Top-k expert selection stability</td><td class="ok">Covered</td><td class="muted">5 seeds; mismatches allowed only inside the tie window</td></tr>
+  <tr><td>Equivalence with the fp32 F.linear fallback it replaces</td><td class="ok">Covered</td><td class="muted">Direct comparison at M = 1, 16, 128</td></tr>
+  <tr><td>End-to-end perf + accuracy</td><td class="ok">Covered</td><td class="muted">MI355X TP4, GLM-5.2: +3.1% throughput, gsm8k/RULER unchanged</td></tr>
+  <tr><td>GateLinear.forward tier dispatch</td><td class="gap">Not covered</td><td class="muted">Tests call the custom op directly, not the layer's tier-5 branch</td></tr>
+  <tr><td>params_dtype decision under force_fp32_compute</td><td class="gap">Not covered</td><td class="muted">bf16-vs-fp32 weight branch in __init__ has no unit test</td></tr>
+  <tr><td>Large M (&gt;128) in unit tests</td><td class="gap">Not covered</td><td class="muted">Only covered indirectly by the e2e sweep</td></tr>
+  <tr><td>Untuned-shape fallback inside tgemm.mm</td><td class="gap">Not covered</td><td class="muted">Behavior relies on AITER's own fallback</td></tr>
+  <tr><td>torch.compile path through the fake impl</td><td class="gap">Not covered</td><td class="muted">No compile-mode test</td></tr>
+  <tr><td>Runs in upstream CI</td><td class="gap">Not covered</td><td class="muted">Skips without ROCm + gfx950 + AITER; 81/81 ran locally</td></tr>
+</table></div>
+</section>
+
+<!-- ============================================================ PR 51309 -->
+<section class="panel" id="p51309">
+<h2>PR 51309 — Skip redundant sparse index remap on non-indexer layers</h2>
+<div class="pills"><span class="pill">+168 / -13 in 2 files</span><span class="pill">rocm</span>
+<a href="https://github.com/vllm-project/vllm/pull/51309">github.com/vllm-project/vllm/pull/51309</a></div>
+
+<h3>What it does, in simple words</h3>
+<div class="simple">
+<p>With cross-layer index sharing (GLM-5.2, index_topk_freq=4), only 21 of 78 attention layers
+actually recompute the shared top-k token indices; the other 57 reuse them. But the old code re-ran
+the index remap kernel — which translates per-request indices into global KV-cache positions — on
+every layer, recomputing the exact same values 57 extra times per forward pass.</p>
+<p>This PR computes a flag at layer init ("does this layer own an indexer, or is spec decode on?")
+and runs the remap only when it is true. Skipped layers reuse the paged_kv_indices already written
+by the last indexer layer, which are bit-identical to what a re-run would produce.</p>
+</div>
+
+<div class="stats">
+  <div class="stat"><div class="v good">-73.3%</div><div class="l">Remap kernel launches</div></div>
+  <div class="stat"><div class="v good">2,392 → 646 ms</div><div class="l">Remap GPU time per capture</div></div>
+  <div class="stat"><div class="v good">+0.6%</div><div class="l">Output throughput (geomean)</div></div>
+  <div class="stat"><div class="v">21 / 78</div><div class="l">Layers that still remap (GLM-5.2)</div></div>
+</div>
+
+<h3>Anticipated reviewer questions</h3>
+<div class="qa-box">
+  <details><summary>How do you guarantee layer 0 owns an indexer, so the shared buffer is initialized before any layer skips? <span class="lk hot">very likely</span></summary>
+    <div class="answer">The frequency-based sharing scheme assigns indexers at layers 0, k, 2k, ... — layer 0 always owns one by construction, so the shared top-k buffer and paged_kv_indices are written before any non-indexer layer reuses them.
+    <div class="push">If pushed: there is no assert encoding that invariant today. Adding one in __init__ (or at the model level) is a cheap hardening follow-up I am happy to add.</div></div>
+  </details>
+  <details><summary>Why does speculative decoding still need the remap on every layer? <span class="lk hot">very likely</span></summary>
+    <div class="answer">Spec decode permutes the token order in the shared buffer between layers (draft/verify reordering), so the remap inputs are not stable across layers the way they are in normal decoding. The gate is "indexer is not None OR speculative_config is not None" precisely for that case, and the test covers all four combinations.</div>
+  </details>
+  <details><summary>The remap writes into shared attn_metadata.paged_kv_indices. Can a skipping layer read stale data? <span class="lk hot">very likely</span></summary>
+    <div class="answer">No. Non-indexer layers do not modify any input to the remap, so re-running it would rewrite paged_kv_indices with bit-identical values — the skipped work is provably redundant, which is also why accuracy is bit-for-bit expected-unchanged (gsm8k/RULER confirm within noise).</div>
+  </details>
+  <details><summary>Why compute needs_index_remap in __init__ rather than per forward call? <span class="lk">likely</span></summary>
+    <div class="answer">Indexer ownership is a static property of the layer, and speculative_config is fixed for the server lifetime. A constant Python bool costs nothing per step and is CUDA-graph / piecewise-compile friendly — no data-dependent control flow enters the captured graph.</div>
+  </details>
+  <details><summary>Does the default configuration change at all? <span class="lk">likely</span></summary>
+    <div class="answer">No. With the default index_topk_freq = 1 every layer owns an indexer, so needs_index_remap is True everywhere and the code path is identical to before. Only models configured with cross-layer index sharing (GLM-5.2 with freq 4) see the skip.</div>
+  </details>
+  <details><summary>Where do 21-of-78 and the -73.3% launch reduction come from? <span class="lk">likely</span></summary>
+    <div class="answer">GLM-5.2 has 78 attention layers; with index_topk_freq = 4, 21 of them own an indexer. 21/78 = 0.269 launches per layer, which matches the measured 139,378 → 37,254 launch counts and the -73% GPU-time drop (2,392 ms → 646 ms per capture).</div>
+  </details>
+  <details><summary>Your tests monkeypatch _forward_mla, the triton kernel, the config, and the workspace manager. Are they testing anything real? <span class="lk hot">very likely</span></summary>
+    <div class="answer">They pin the two contracts this PR introduces: the gate truth table (indexer × speculative) and "forward_mqa launches the remap exactly when gated on". Numerical equivalence does not need a unit test because skipping recomputes nothing — the values are bit-identical — and the e2e accuracy runs confirm it. I agree an integration test where a non-indexer layer consumes indices produced by a previous indexer layer would strengthen this; that needs a real ROCm multi-layer harness.</div>
+  </details>
+</div>
+
+<div class="callout"><b>Weak spots — acknowledge these proactively</b>
+The layer-0-owns-an-indexer invariant is relied on but not asserted anywhere — offer to add the
+assert. The unit tests monkeypatch heavily (config, workspace manager, the triton kernel, even
+_forward_mla), so they pin the gate contract but not real multi-layer behavior; the e2e accuracy
+run is what demonstrates correctness in practice. No spec-decode e2e run is included, only the
+unit-level gate test.</div>
+
+<h3>Test coverage</h3>
+<div class="table-frame"><table>
+  <tr><th>Area</th><th>Status</th><th>Notes</th></tr>
+  <tr><td>Gate truth table (indexer × speculative)</td><td class="ok">Covered</td><td class="muted">All 4 combinations parametrized</td></tr>
+  <tr><td>Remap launched exactly when gated on</td><td class="ok">Covered</td><td class="muted">forward_mqa call-count check for both gate states</td></tr>
+  <tr><td>End-to-end perf + accuracy</td><td class="ok">Covered</td><td class="muted">MI355X TP4: +0.6% throughput, -0.9% TTFT; accuracy within noise</td></tr>
+  <tr><td>Multi-layer integration (skip layer reads prior indexer's output)</td><td class="gap">Not covered</td><td class="muted">No test that a non-indexer layer consumes correct indices</td></tr>
+  <tr><td>Real triton remap kernel output</td><td class="gap">Not covered</td><td class="muted">Kernel is monkeypatched out in both tests</td></tr>
+  <tr><td>Speculative decoding end-to-end</td><td class="gap">Not covered</td><td class="muted">Gate is unit-tested; no spec-decode run in results</td></tr>
+  <tr><td>Layer-0-owns-indexer invariant</td><td class="gap">Not covered</td><td class="muted">Relied on by construction; no assert or test encodes it</td></tr>
+  <tr><td>Runs in upstream CI</td><td class="gap">Not covered</td><td class="muted">Skips without ROCm + supported AITER</td></tr>
+</table></div>
+</section>
+
+<!-- ============================================================ PR 51314 -->
+<section class="panel" id="p51314">
+<h2>PR 51314 — Skip cleaning sparse prefill MQA logits</h2>
+<div class="pills"><span class="pill">+64 / -1 in 2 files</span><span class="pill">rocm</span>
+<a href="https://github.com/vllm-project/vllm/pull/51314">github.com/vllm-project/vllm/pull/51314</a></div>
+
+<h3>What it does, in simple words</h3>
+<div class="simple">
+<p>During sparse prefill, the MQA logits buffer was allocated with <code>torch.full(..., -inf)</code>
+— an fp32 memset kernel that ran before every single logits kernel, fully serialized on the GPU
+stream. That was 18,162 launches and 1.25 seconds of GPU time per profiling capture, 0.89% of all
+kernel time.</p>
+<p>This PR passes <code>clean_logits=False</code> so AITER allocates the buffer with
+<code>torch.empty</code> instead. It is safe because the buffer's only consumer,
+top_k_per_row_prefill, reads each row strictly inside its valid [cu_seqlen_ks, cu_seqlen_ke) range
+and guards its final vectorized load — the uninitialized padding bytes are never read, so the
+top-k result is unchanged.</p>
+</div>
+
+<div class="stats">
+  <div class="stat"><div class="v good">18,162 → 0</div><div class="l">fp32 fill launches per capture</div></div>
+  <div class="stat"><div class="v good">-1.1%</div><div class="l">TTFT geomean at ISL 8192</div></div>
+  <div class="stat"><div class="v good">-4.9%</div><div class="l">Best TTFT case (concurrency 32)</div></div>
+  <div class="stat"><div class="v">1 arg</div><div class="l">Size of the functional change</div></div>
+</div>
+
+<h3>Anticipated reviewer questions</h3>
+<div class="qa-box">
+  <details><summary>How do you know the uninitialized logits are never read? <span class="lk hot">very likely</span></summary>
+    <div class="answer">The buffer has exactly one consumer, top_k_per_row_prefill, and it reads each row only inside [cu_seqlen_ks, cu_seqlen_ke). Its vectorized path additionally guards the final partial load, so lanes never touch padding. I verified this in the AITER kernel source, not just the docs.</div>
+  </details>
+  <details><summary>Uninitialized fp32 memory can contain NaNs. Can a NaN poison the top-k comparisons? <span class="lk hot">very likely</span></summary>
+    <div class="answer">Only if it were loaded — and it never is. The guard on the final partial load means garbage values outside the valid range never enter a comparison, so NaN semantics never come into play. This is stronger than "NaN compares false": the bytes are simply never read.</div>
+  </details>
+  <details><summary>Does the clean_logits kwarg exist in every AITER version vLLM supports? <span class="lk hot">very likely</span></summary>
+    <div class="answer">It exists in the AITER commit this stack is validated against (4a1cc77) and vLLM pins AITER in its ROCm base image, so the pinned pair is consistent. An older out-of-band AITER would raise a TypeError at the call site — loud, not silent.
+    <div class="push">If pushed: a one-line signature check (or try/except TypeError falling back to the cleaning call) is easy to add — the same guarded pattern PR 51315 already uses for its kernel lookup.</div></div>
+  </details>
+  <details><summary>The gain is +0.1% throughput. Is this worth a PR? <span class="lk">likely</span></summary>
+    <div class="answer">The fill sits on the prefill critical path, so the win lands in TTFT, not throughput: -1.1% geomean at ISL 8192 and up to -4.9% at concurrency 32. Per capture it removes 18,162 kernel launches and 1.25 s of GPU time (0.89% of total) that were fully serialized before every logits kernel. It is a one-argument change with no numerical effect.</div>
+  </details>
+  <details><summary>What about the gfx942 path? The test forces _ON_GFX942 = False. <span class="lk">likely</span></summary>
+    <div class="answer">gfx942 takes a different module path that this PR does not touch — its behavior is unchanged. The change and the test only cover the gfx950 AITER fast path where the fill existed.
+    <div class="push">If pushed: extending the same optimization to the gfx942 branch is possible follow-up work if its module grows the same kwarg.</div></div>
+  </details>
+  <details><summary>RULER dropped 0.870 to 0.838 — that is outside your stated ±0.02 variance. Explain. <span class="lk hot">very likely</span></summary>
+    <div class="answer">Both accuracy tasks run at the checkpoint's default sampling (temperature 1.0, top_p 0.95), so single runs are noisy; gsm8k moved up +0.011 in the same run, and sibling PRs on the identical harness show niah moving both directions (+0.014 on 51309, +0.016 on 50535). Mechanically the change cannot alter outputs: it only skips initializing memory that is never read. I can rerun greedy or with more samples before merge if that helps.</div>
+  </details>
+  <details><summary>Why did MQA-logits launches change (18,108 vs 17,930) if the workload is the same? <span class="lk">possible</span></summary>
+    <div class="answer">The before/after profiles are comparable serving captures, not instruction-identical replays, so kernel counts differ by ~1%. The deterministic signal is the fill count: 18,162 launches to exactly zero.</div>
+  </details>
+  <details><summary>Is the torch reference path affected? <span class="lk">possible</span></summary>
+    <div class="answer">No. fp8_mqa_logits_torch (the non-AITER fallback) is untouched and still initializes its buffer. Only the AITER fast path skips the fill.</div>
+  </details>
+</div>
+
+<div class="callout"><b>Weak spots — acknowledge these proactively</b>
+Two things to concede before being asked: (1) the RULER niah delta (0.870 to 0.838) is outside the
+quoted ±0.02 spread — have the sampling-variance explanation and a greedy-rerun offer ready; (2)
+correctness rests on an AITER-side guarantee (the guarded read range in top_k_per_row_prefill) that
+vLLM's test does not verify directly — the unit test only proves the kwarg is forwarded. There is
+also no version guard if someone runs an older AITER without the kwarg.</div>
+
+<h3>Test coverage</h3>
+<div class="table-frame"><table>
+  <tr><th>Area</th><th>Status</th><th>Notes</th></tr>
+  <tr><td>vLLM forwards clean_logits=False to AITER</td><td class="ok">Covered</td><td class="muted">Unit test with mocked AITER module captures the kwarg</td></tr>
+  <tr><td>End-to-end perf + accuracy</td><td class="ok">Covered</td><td class="muted">MI355X TP4: fill launches 18,162 → 0; TTFT -1.1% geomean at 8k</td></tr>
+  <tr><td>Kernel correctness on an uninitialized buffer</td><td class="gap">Not covered</td><td class="muted">Relies on AITER's top_k_per_row_prefill guarantee + e2e accuracy</td></tr>
+  <tr><td>Older AITER without the kwarg</td><td class="gap">Not covered</td><td class="muted">No version guard; would TypeError at runtime</td></tr>
+  <tr><td>gfx942 branch</td><td class="gap">Not covered</td><td class="muted">Different module path; unchanged and untested here</td></tr>
+  <tr><td>top_k_per_row_prefill masking behavior</td><td class="gap">Not covered</td><td class="muted">Not directly tested from the vLLM side</td></tr>
+  <tr><td>Runs in upstream CI</td><td class="gap">Not covered</td><td class="muted">Skips without ROCm</td></tr>
+</table></div>
+</section>
+
+<!-- ============================================================ PR 51315 -->
+<section class="panel" id="p51315">
+<h2>PR 51315 — Fuse the DSA indexer prologue with AITER</h2>
+<div class="pills"><span class="pill">+288 / -12 in 4 files</span><span class="pill">rocm</span><span class="pill">deepseek</span>
+<a href="https://github.com/vllm-project/vllm/pull/51315">github.com/vllm-project/vllm/pull/51315</a></div>
+
+<h3>What it does, in simple words</h3>
+<div class="simple">
+<p>Before attention, the DeepSeek Sparse Attention (DSA) indexer runs a "prologue": normalize K
+(LayerNorm), apply RoPE to Q and K, quantize to FP8, and write K into its cache. That took four
+separate GPU kernel launches, each reading and writing global memory.</p>
+<p>This PR calls AITER's fused indexer_qk_rope_quant_and_cache kernel, which does all four steps in
+a single launch. It is gated to exactly the shape the kernel supports (bf16 model, head_dim 128,
+rope_dim 64, ue8m0 scale format); everything else keeps the old path. Because the fused kernel
+writes the K cache itself, the downstream indexer op is built with skip_k_cache_insert=True so the
+cache is written exactly once.</p>
+<p>The trade-off to know cold: the fused kernel is 66% faster for decode but 65% slower for
+prefill. In a serving workload decode dominates, so the full-trace prologue time still drops 4.8%
+and e2e throughput improves at both input lengths.</p>
+</div>
+
+<div class="stats">
+  <div class="stat"><div class="v good">4 → 1</div><div class="l">Prologue kernel launches</div></div>
+  <div class="stat"><div class="v good">-66%</div><div class="l">Decode prologue time (17.4 → 5.9 µs)</div></div>
+  <div class="stat"><div class="v bad">+65%</div><div class="l">Prefill prologue time (slower!)</div></div>
+  <div class="stat"><div class="v good">+0.7%</div><div class="l">Output throughput (geomean)</div></div>
+</div>
+
+<h3>Anticipated reviewer questions</h3>
+<div class="qa-box">
+  <details><summary>The fused kernel is 65% slower on prefill (164 → 271 µs). Why enable it unconditionally instead of dispatching decode to fused and prefill to the old path? <span class="lk hot">very likely</span></summary>
+    <div class="answer">Because the net is positive everywhere it was measured: across the full serving trace the prologue GPU time drops 4.8% (1,093.6 → 1,041.4 ms), and the e2e sweep is positive at both ISL 1024 (+0.9%) and ISL 8192 (+0.5%) — decode dominates the prologue's total cost in a serving workload. Phase-based dispatch would mean two code paths writing the same K cache plus per-batch control flow inside the captured graph.
+    <div class="push">If pushed: a decode/prefill split is a legitimate follow-up if prefill-heavy or offline-batch workloads become a priority; the gate structure makes it easy to add. AITER improving the fused kernel's large-M path is the cleaner long-term fix.</div></div>
+  </details>
+  <details><summary>Why is the fused kernel slower at prefill in the first place? <span class="lk">likely</span></summary>
+    <div class="answer">It is tuned for decode-shaped launches (small token counts), where the win is removing three launch overheads and intermediate global-memory round trips. At large M the four separate kernels each get enough parallelism to saturate the GPU, so fusion's benefit disappears and its scheduling constraints cost time.</div>
+  </details>
+  <details><summary>The q comparison uses rtol=0.13 — that looks enormous. Justify it. <span class="lk hot">very likely</span></summary>
+    <div class="answer">The output is fp8 e4m3, whose relative code spacing is ~12.5%; one code of drift — caused purely by a different fp32 reduction order inside the fused kernel — is exactly rtol 0.13. The comment in the test says precisely this. Crucially, the parts that persist are stricter: the K-cache bytes are compared bit-exactly (rtol=0, atol=0) and the weights at 1e-5.</div>
+  </details>
+  <details><summary>The fused kernel writes the K cache itself. How do you ensure the cache is written exactly once — not twice, not zero times? <span class="lk hot">very likely</span></summary>
+    <div class="answer">SparseAttnIndexer is constructed with skip_k_cache_insert=True from the same static flag (use_fused_indexer_qk) that selects the fused path, so the two can never disagree; the flag is computed once in __init__ and nothing else writes that cache. The forward also passes k=None to the indexer op, so a double-write would fail loudly rather than silently.</div>
+  </details>
+  <details><summary>What happens during the profiling / dummy run when there is no slot mapping? <span class="lk">likely</span></summary>
+    <div class="answer">The op detects that forward-context attn_metadata is not the per-layer dict yet, skips the kernel, and returns zero-filled q/weights without touching the cache. Zeros are valid placeholder values for the dummy run, whose purpose is memory sizing, not outputs.</div>
+  </details>
+  <details><summary>What if the user's AITER build does not export indexer_qk_rope_quant_and_cache? <span class="lk">likely</span></summary>
+    <div class="answer">aiter_indexer_qk_fused_kernel() catches the ImportError and returns None, which disables the fused gate entirely — the model silently keeps the existing four-kernel path. Unlike a hard version pin, old AITER builds keep working.
+    <div class="push">If pushed: this is a good contrast to raise for 51314, which calls a new kwarg without an equivalent guard — the same pattern could be applied there.</div></div>
+  </details>
+  <details><summary>The gate has many conditions (bf16, head_dim 128, rope_dim 64, ue8m0, quant_block == head_dim). What falls outside it? <span class="lk">likely</span></summary>
+    <div class="answer">Anything that is not the DeepSeek-V3.2/GLM-5.2 indexer geometry — different head or rope dims, non-bf16 model dtype, or a different scale format — keeps the existing path unchanged. The gate is deliberately shape-exact because the AITER kernel only supports that one configuration.</div>
+  </details>
+  <details><summary>Why does the custom op take a layer name and resolve metadata internally instead of taking slot_mapping as a tensor argument? <span class="lk">possible</span></summary>
+    <div class="answer">slot_mapping lives in per-layer forward-context metadata that is not a stable tensor argument at trace time. Encoding the layer name keeps the op signature torch.compile-safe; the op resolves the layer's metadata at run time. The op is registered with mutates_args=['kv_cache'] so the compiler knows about the cache write.</div>
+  </details>
+  <details><summary>deepseek_v2.py is shared model code. Does this touch NVIDIA or non-AITER ROCm? <span class="lk">possible</span></summary>
+    <div class="answer">No. The first condition of the gate is rocm_aiter_ops.is_enabled(), so CUDA and AITER-disabled ROCm builds take exactly the code they take today; the diff only reorders where indexer_op is constructed.</div>
+  </details>
+</div>
+
+<div class="callout"><b>Weak spots — acknowledge these proactively</b>
+Lead with the prefill regression yourself: +65% on the prefill prologue kernel, defended by the
+full-trace -4.8% and e2e sweeps positive at both ISL 1024 and 8192 — and offer phase-based dispatch
+as follow-up if asked. Second, be ready to explain rtol=0.13 on the q comparison (one fp8 e4m3 code
+of drift from reduction order — the persisted cache is bit-exact). Third, the skip_k_cache_insert
+single-write invariant and the shape gate are relied on by construction but not unit-tested.</div>
+
+<h3>Test coverage</h3>
+<div class="table-frame"><table>
+  <tr><th>Area</th><th>Status</th><th>Notes</th></tr>
+  <tr><td>Fused vs separate-kernel equivalence</td><td class="ok">Covered</td><td class="muted">K-cache bytes bit-exact; weights at 1e-5; q within one fp8 code</td></tr>
+  <tr><td>Both RoPE layouts (neox and interleaved)</td><td class="ok">Covered</td><td class="muted">Parametrized is_neox True/False</td></tr>
+  <tr><td>Block sizes and token counts</td><td class="ok">Covered</td><td class="muted">Block 16/64; tokens 1, 37, 256 (decode, ragged, prefill-ish)</td></tr>
+  <tr><td>Missing-kernel fallback in older AITER</td><td class="ok">Covered</td><td class="muted">ImportError → None → gate off; also the test's skip condition</td></tr>
+  <tr><td>End-to-end perf + accuracy</td><td class="ok">Covered</td><td class="muted">MI355X TP4: +0.7% throughput, -0.7% TPOT; accuracy within noise</td></tr>
+  <tr><td>Dispatch gate conditions in the model __init__</td><td class="gap">Not covered</td><td class="muted">Shape/dtype/format gate has no unit test</td></tr>
+  <tr><td>skip_k_cache_insert single-write guarantee</td><td class="gap">Not covered</td><td class="muted">Relied on by construction; no test that cache is written exactly once</td></tr>
+  <tr><td>Profiling / dummy-run zero-output branch</td><td class="gap">Not covered</td><td class="muted">Untested</td></tr>
+  <tr><td>Large-M prefill behavior</td><td class="gap">Not covered</td><td class="muted">Unit test tops out at 256 tokens; +65% prefill kernel time unguarded</td></tr>
+  <tr><td>torch.compile through the custom op</td><td class="gap">Not covered</td><td class="muted">No compile-mode test</td></tr>
+  <tr><td>Runs in upstream CI</td><td class="gap">Not covered</td><td class="muted">Skips without ROCm + AITER exporting the fused kernel</td></tr>
+</table></div>
+</section>
+
+<p class="footer">Generated from the public PR descriptions and diffs of vllm-project/vllm PRs 50535, 51309, 51314, 51315.</p>
+</div>
+
+<script>
+  document.querySelectorAll(".tab").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      document.querySelectorAll(".tab").forEach(function (b) { b.classList.remove("active"); });
+      document.querySelectorAll(".panel").forEach(function (p) { p.classList.remove("active"); });
+      btn.classList.add("active");
+      document.getElementById(btn.dataset.tab).classList.add("active");
+    });
+  });
+</script>
+</body>
+</html>
