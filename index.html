@@ -106,6 +106,16 @@
   details.pr-card .pr-body ul { margin: 6px 0 0; padding-left: 20px; }
   details.pr-card .pr-body li { margin-bottom: 5px; }
 
+  .easy {
+    background: var(--surface-2);
+    border-left: 3px solid var(--green);
+    border-radius: 0 8px 8px 0;
+    padding: 10px 14px;
+    margin: 10px 0 14px;
+    font-size: 15px;
+  }
+  .easy b { color: var(--green); }
+
   .finding { margin: 0 0 14px; }
   .finding b { color: var(--text); }
   .simple p { margin: 0 0 12px; }
@@ -156,6 +166,9 @@ deep-dive review prep for the four PRs from the earlier review round.</p>
 <details class="pr-card">
 <summary><a href="https://github.com/vllm-project/vllm/pull/53789">#53789</a> — Bound the decode paged-MQA-logits sanitize to the top-k read region <span class="lk">+239 / -1 · awaiting first review</span></summary>
 <div class="pr-body">
+<p class="easy"><b>In simple words:</b> before every answer step, the GPU cleaned a very big table —
+even when only a small part of it was used. Now it cleans only the part that is really read.
+Same result, much less wasted time.</p>
 <p class="finding"><b>What it does:</b> since upstream #49714, every decode step scrubbed NaN/Inf
 from the entire <code>[rows × max_model_len]</code> logits workspace — 258,048 columns on GLM-5.2,
 43 µs per call no matter how short the context. This PR scrubs only the front window the top-k
@@ -186,6 +199,9 @@ instead". Also expect a request to close #50008 now that this supersedes it.</p>
 <details class="pr-card">
 <summary><a href="https://github.com/vllm-project/vllm/pull/53792">#53792</a> — Resolve the indexer fp8 cache dtype once at import <span class="lk">+9 / -11 · awaiting first review</span></summary>
 <div class="pr-body">
+<p class="easy"><b>In simple words:</b> the code asked the same question ("which fp8 type does this
+GPU use?") again and again, millions of times. The answer never changes. Now it asks only one time,
+when the program starts.</p>
 <p class="finding"><b>What it does:</b> pure cleanup, no behavior change. <code>current_platform.fp8_dtype()</code>
 cannot change after import, but the sparse-MLA module called it on every function invocation — once
 per DSA layer per forward pass, including inside the fused prologue op from 51315. Upstream #46172
@@ -209,6 +225,9 @@ decode tests cover every call path).</p>
 <details class="pr-card">
 <summary><a href="https://github.com/vllm-project/vllm/pull/51315">#51315</a> — Fuse the DSA indexer prologue with AITER <span class="lk">reviewed · addressed Aug 24</span></summary>
 <div class="pr-body">
+<p class="easy"><b>In simple words:</b> before attention, the GPU ran four small jobs one after
+another to prepare the data. Now one combined job does all four steps in a single run. Fewer jobs
+means faster decode. The trade: it is a bit slower for long prompts, but overall it wins.</p>
 <p class="finding"><b>What has happened:</b> got its first substantive inline review — Rohan138
 (collaborator, Aug 19) asked to move the custom-op impl/fake pair into <code>_aiter_ops.py</code>
 to keep AITER imports centralized. Addressed Aug 24: both functions moved, the AITER import now
@@ -234,6 +253,9 @@ main technical exposure.</p>
 <details class="pr-card">
 <summary><a href="https://github.com/vllm-project/vllm/pull/51314">#51314</a> — Skip cleaning sparse prefill MQA logits <span class="lk">e2e added Aug 10 · awaiting code review</span></summary>
 <div class="pr-body">
+<p class="easy"><b>In simple words:</b> the GPU filled a big buffer with empty values before every
+use. But those values were never read by anyone. Now we skip the filling. Same answer, less
+work.</p>
 <p class="finding"><b>What has happened:</b> Fangzhou-Ai requested model-level e2e perf and
 accuracy (Aug 9); the full serving sweep and accuracy tables were added Aug 10. No inline code
 review yet. Rebased Aug 27.</p>
@@ -253,6 +275,9 @@ demonstrates the same idea on the decode side with a bounded scrub — a useful 
 <details class="pr-card">
 <summary><a href="https://github.com/vllm-project/vllm/pull/51309">#51309</a> — Skip redundant sparse index remap on non-indexer layers <span class="lk">awaiting first review</span></summary>
 <div class="pr-body">
+<p class="easy"><b>In simple words:</b> in this model, one layer does a calculation and 3 other
+layers reuse its result. But the old code repeated the calculation in all layers anyway — getting
+the exact same numbers every time. Now only the layer that needs it does the work.</p>
 <p class="finding"><b>What has happened:</b> no human review yet — only bot activity and steady
 rebases (latest Aug 27). The gate unit tests and e2e A/B are unchanged from the earlier
 analysis.</p>
@@ -272,6 +297,9 @@ question quickly since the skip is bit-identical by construction.</p>
 <details class="pr-card">
 <summary><a href="https://github.com/vllm-project/vllm/pull/50535">#50535</a> — Use AITER tuned GEMM for the MoE router gate <span class="lk">5 reviewers assigned · awaiting review</span></summary>
 <div class="pr-body">
+<p class="easy"><b>In simple words:</b> the "router" is a tiny calculation that picks which experts
+answer each token. On AMD GPUs it was using a slow general math path. Now it uses the fast tuned
+path that already existed. About 3% more speed for the whole model, same answers.</p>
 <p class="finding"><b>What has happened:</b> the reviewer list has grown to five (mgoin, tjtanaa,
 pavanimajety, zyongye, AndreasKaratzas) but no inline comments yet. Rebased Aug 27.</p>
 <p class="finding"><b>What to expect:</b> this is the highest-value PR (+3.1% throughput) and the
@@ -293,6 +321,9 @@ request to extend unit-test M beyond 128. All answers are in the deep-dive tab.<
 <details class="pr-card">
 <summary><a href="https://github.com/vllm-project/vllm/pull/50008">#50008</a> — Drop redundant -inf prefill of decode paged MQA-logits buffer <span class="lk">draft · stale since Jul 28</span></summary>
 <div class="pr-body">
+<p class="easy"><b>In simple words:</b> an old first try at the same idea as #53789 — it removed
+the buffer filling completely, which was risky. The new PR does it in a safer way. This one can be
+closed.</p>
 <p class="finding"><b>What it does / happened:</b> the early exploratory version of the decode-side
 fix — it removed the full-width fill entirely (+0/-1) and flagged its own risk: the FlyDSL kernel
 documents a -inf-prefill contract. Untouched since Jul 28.</p>
@@ -309,6 +340,9 @@ numbers. Closing proactively keeps the queue clean.</p>
 <details class="pr-card">
 <summary><a href="https://github.com/vllm-project/vllm/pull/48051">#48051</a> — Don't re-quantize bf16 MLA kv_b_proj for GLM MoE DSA <span class="lk">draft · likely superseded by #53123</span></summary>
 <div class="pr-body">
+<p class="easy"><b>In simple words:</b> a bug fix. The code was compressing attention weights that
+should stay in full quality. This broke the model — it repeated the same sentence forever. The fix
+leaves those weights alone, and the model answers normally again.</p>
 <p class="finding"><b>What it does / happened:</b> a genuine accuracy-bug fix, not a perf PR: the
 ROCm AITER MLA path re-quantized intentionally-bf16 <code>kv_b_proj</code> weights to fp4/fp8
 (~11% error per attention layer), driving greedy decoding into repetition loops on GLM-5.2. The fix
