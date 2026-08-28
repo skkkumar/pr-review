@@ -193,6 +193,17 @@ instead". Also expect a request to close #50008 now that this supersedes it.</p>
 <li>An empty workspace is a no-op: no kernel launch at all.</li>
 <li>The launch grid depends only on the row count, never on sequence lengths — so CUDA-graph capture stays valid when contexts grow between steps.</li>
 </ul>
+<h4>Why are there hardcoded values in the code?</h4>
+<ul>
+<li><b>They are speed settings, not correctness settings.</b> If a value is wrong, the code is still 100% correct — it is only a little less fast. The tests prove the result is the same for any value: they even force the values to 0 and still check for an exact match.</li>
+<li><b><code>_SANITIZE_FLT_MAX</code> is not a setting at all.</b> It is the exact value that <code>nan_to_num_</code> uses for +inf and -inf. It must be this value, so it is written once at the top and reused. A test checks it.</li>
+<li><b><code>_SANITIZE_BLOCK = 1024</code>:</b> how many numbers one GPU worker handles at a time. The kernel just reads and writes memory, so almost any reasonable number gives the same speed. Auto-tuning it would add startup cost for zero gain.</li>
+<li><b><code>_SANITIZE_TARGET_PROGRAMS = 2048</code>:</b> "try to keep about 2048 workers busy". The MI355X has 256 compute units, so 2048 means about 8 workers per unit — enough to keep the GPU full. When the batch is small, each row is split between more workers; when the batch is big, one worker per row is enough.</li>
+<li><b><code>_SANITIZE_MAX_CHUNKS = 32</code>:</b> a limit so one row is not split into too many tiny pieces — each piece must have enough work to be worth starting.</li>
+<li><b><code>_SANITIZE_MIN_ELEMS = 10M</code>:</b> the switch point. Below 10 million numbers (40 MB), starting a GPU kernel costs more than it saves, so the old simple call runs instead — and that path is bit-for-bit the same as today's code. This number was measured on MI355X.</li>
+<li><b>Why not config options or environment variables?</b> These are internal knobs no user should ever touch. vLLM's own kernels hardcode such numbers everywhere — adding options would only grow the config surface. Making them module constants also lets the tests change them easily, which the tests do.</li>
+<li><b>If a reviewer pushes back:</b> the one fair point is that 2048 fits gfx950. A cleaner version is <code>8 × number of compute units</code>, read from the device once at start — a two-line change, easy to offer.</li>
+</ul>
 </div>
 </details>
 
