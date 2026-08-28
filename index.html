@@ -96,6 +96,16 @@
   .callout.info { border-left-color: var(--accent); }
   .callout b { display: block; margin-bottom: 4px; }
 
+  details.pr-card {
+    border: 1px solid var(--border); border-radius: 8px;
+    background: var(--surface); margin: 12px 0; padding: 0 16px;
+  }
+  details.pr-card > summary { padding: 12px 4px; font-size: 15px; }
+  details.pr-card .pr-body { padding: 2px 4px 14px 22px; }
+  details.pr-card .pr-body h4 { margin: 14px 0 6px; font-size: 14px; }
+  details.pr-card .pr-body ul { margin: 6px 0 0; padding-left: 20px; }
+  details.pr-card .pr-body li { margin-bottom: 5px; }
+
   .finding { margin: 0 0 14px; }
   .finding b { color: var(--text); }
   .simple p { margin: 0 0 12px; }
@@ -143,7 +153,9 @@ deep-dive review prep for the four PRs from the earlier review round.</p>
 
 <h2>New this week</h2>
 
-<h3><a href="https://github.com/vllm-project/vllm/pull/53789">#53789</a> — Bound the decode paged-MQA-logits sanitize to the top-k read region <span class="pill">+239 / -1</span></h3>
+<details class="pr-card">
+<summary><a href="https://github.com/vllm-project/vllm/pull/53789">#53789</a> — Bound the decode paged-MQA-logits sanitize to the top-k read region <span class="lk">+239 / -1 · awaiting first review</span></summary>
+<div class="pr-body">
 <p class="finding"><b>What it does:</b> since upstream #49714, every decode step scrubbed NaN/Inf
 from the entire <code>[rows × max_model_len]</code> logits workspace — 258,048 columns on GLM-5.2,
 43 µs per call no matter how short the context. This PR scrubs only the front window the top-k
@@ -152,16 +164,28 @@ elements where a kernel launch costs more than it saves. It is the decode-side s
 prefill fix — and the safe, tested successor to the older draft #50008, which dropped the fill
 entirely.</p>
 <p class="finding"><b>What has happened:</b> opened Aug 25 with a full e2e sweep and 9 passing unit
-tests on MI355X (correct window, untouched tail, exact NaN/Inf mapping, fallback crossover, static
-launch grid for CUDA-graph safety). Per-call sanitize time drops 43.1 → 4.6 µs (426 → 52 ms per
-run; 1.82% → 0.21% of GPU kernel time); throughput +3.2% at concurrency 256, +0.6% geomean. No
-human review yet; rebased Aug 27.</p>
+tests on MI355X. Per-call sanitize time drops 43.1 → 4.6 µs (426 → 52 ms per run; 1.82% → 0.21% of
+GPU kernel time); throughput +3.2% at concurrency 256, +0.6% geomean. No human review yet; rebased
+Aug 27.</p>
 <p class="finding"><b>What to expect:</b> questions on the 10M-element crossover heuristic (how was
 it chosen, is it hardware-dependent), confirmation that the launch grid depends only on shapes so
 CUDA-graph capture stays valid, and "why not fix the #49714 scrub upstream for all platforms
 instead". Also expect a request to close #50008 now that this supersedes it.</p>
+<h4>Test cases added (9 cases, one new test file)</h4>
+<ul>
+<li>The scrubbed window matches <code>nan_to_num_</code> exactly — checked for single-token and 2-token decode (next_n 1 and 2) and for both 1-D and 2-D sequence-length layouts, with edge lengths (empty row, full-width row).</li>
+<li>Nothing past the top-k read bound is touched — the unread tail keeps its old values.</li>
+<li>Each special value maps exactly like <code>nan_to_num_</code>: NaN → -inf, +inf → FLT_MAX, -inf → -FLT_MAX, and normal numbers are left alone.</li>
+<li>Below the 10M-element crossover, the old <code>nan_to_num_</code> path runs and the Triton kernel is never launched — output stays bit-identical to today's code.</li>
+<li>An empty workspace is a no-op: no kernel launch at all.</li>
+<li>The launch grid depends only on the row count, never on sequence lengths — so CUDA-graph capture stays valid when contexts grow between steps.</li>
+</ul>
+</div>
+</details>
 
-<h3><a href="https://github.com/vllm-project/vllm/pull/53792">#53792</a> — Resolve the indexer fp8 cache dtype once at import <span class="pill">+9 / -11</span></h3>
+<details class="pr-card">
+<summary><a href="https://github.com/vllm-project/vllm/pull/53792">#53792</a> — Resolve the indexer fp8 cache dtype once at import <span class="lk">+9 / -11 · awaiting first review</span></summary>
+<div class="pr-body">
 <p class="finding"><b>What it does:</b> pure cleanup, no behavior change. <code>current_platform.fp8_dtype()</code>
 cannot change after import, but the sparse-MLA module called it on every function invocation — once
 per DSA layer per forward pass, including inside the fused prologue op from 51315. Upstream #46172
@@ -173,10 +197,18 @@ beyond the bots.</p>
 already-merged PR started. The only plausible questions: "can fp8_dtype ever differ after import"
 (no — the platform is fixed for the process) and "why no new test" (no behavior change; existing
 decode tests cover every call path).</p>
+<h4>Test cases added</h4>
+<ul>
+<li>None — intentionally. There is no behavior change to test; the existing <code>test_rocm_aiter_mla_decode.py</code> suite already exercises every call path that now reads the constant.</li>
+</ul>
+</div>
+</details>
 
 <h2>The four reviewed PRs — what changed since the last analysis</h2>
 
-<h3><a href="https://github.com/vllm-project/vllm/pull/51315">#51315</a> — Fused DSA indexer prologue</h3>
+<details class="pr-card">
+<summary><a href="https://github.com/vllm-project/vllm/pull/51315">#51315</a> — Fuse the DSA indexer prologue with AITER <span class="lk">reviewed · addressed Aug 24</span></summary>
+<div class="pr-body">
 <p class="finding"><b>What has happened:</b> got its first substantive inline review — Rohan138
 (collaborator, Aug 19) asked to move the custom-op impl/fake pair into <code>_aiter_ops.py</code>
 to keep AITER imports centralized. Addressed Aug 24: both functions moved, the AITER import now
@@ -185,10 +217,23 @@ and the kernel getter stayed local for consistency with <code>_get_aiter_topk_op
 Aug 27.</p>
 <p class="finding"><b>What to expect:</b> Rohan138 resolving the thread, then code-owner review
 (tjtanaa / AndreasKaratzas). The prefill-slower-by-65% question from the deep-dive tab is still the
-main technical exposure; the refactor response also demonstrates the codebase-convention awareness
-reviewers look for.</p>
+main technical exposure.</p>
+<h4>Test cases added (one test, run 12 ways)</h4>
+<ul>
+<li>One equivalence test parametrized 12 ways: both RoPE layouts (neox and interleaved) × block sizes 16 and 64 × token counts 1, 37, 256 (pure decode, ragged, prefill-sized).</li>
+<li>Builds a reference by running the four separate steps the fusion replaces: eager LayerNorm, RoPE, fp8 quantization, and the K-cache write.</li>
+<li>The K-cache bytes must match the reference bit-for-bit (zero tolerance).</li>
+<li>The scaled router weights must match to 1e-5.</li>
+<li>The fp8 Q output may differ by at most one fp8 code (rtol 0.13) — the drift allowed by a different fp32 reduction order.</li>
+<li>A sanity check confirms the fused kernel actually wrote the cache and did not leave it empty.</li>
+<li>The whole file skips unless the AITER build exports the fused kernel.</li>
+</ul>
+</div>
+</details>
 
-<h3><a href="https://github.com/vllm-project/vllm/pull/51314">#51314</a> — Skip cleaning sparse prefill MQA logits</h3>
+<details class="pr-card">
+<summary><a href="https://github.com/vllm-project/vllm/pull/51314">#51314</a> — Skip cleaning sparse prefill MQA logits <span class="lk">e2e added Aug 10 · awaiting code review</span></summary>
+<div class="pr-body">
 <p class="finding"><b>What has happened:</b> Fangzhou-Ai requested model-level e2e perf and
 accuracy (Aug 9); the full serving sweep and accuracy tables were added Aug 10. No inline code
 review yet. Rebased Aug 27.</p>
@@ -196,35 +241,74 @@ review yet. Rebased Aug 27.</p>
 <code>clean_logits</code> kwarg-guard question and the RULER variance explanation (0.870 → 0.838,
 outside the stated ±0.02) remain the two answers to have ready. Note the new sibling 53789 now
 demonstrates the same idea on the decode side with a bounded scrub — a useful consistency story.</p>
+<h4>Test cases added (1 test)</h4>
+<ul>
+<li>A wiring test: replaces the AITER module with a mock and checks that vLLM passes <code>clean_logits=False</code> through to <code>fp8_mqa_logits</code>.</li>
+<li>Also verifies the kernel's return value flows back to the caller unchanged.</li>
+<li>It deliberately does not test the kernel itself — correctness rests on AITER's guarded read range plus the e2e accuracy run. Expect a reviewer to note that.</li>
+</ul>
+</div>
+</details>
 
-<h3><a href="https://github.com/vllm-project/vllm/pull/51309">#51309</a> — Skip redundant sparse index remap</h3>
+<details class="pr-card">
+<summary><a href="https://github.com/vllm-project/vllm/pull/51309">#51309</a> — Skip redundant sparse index remap on non-indexer layers <span class="lk">awaiting first review</span></summary>
+<div class="pr-body">
 <p class="finding"><b>What has happened:</b> no human review yet — only bot activity and steady
 rebases (latest Aug 27). The gate unit tests and e2e A/B are unchanged from the earlier
 analysis.</p>
 <p class="finding"><b>What to expect:</b> first review. The layer-0-owns-an-indexer assert remains
-the cheapest preemptive hardening to offer; the four-way gate test (indexer × speculative) should
-satisfy the correctness question quickly since the skip is bit-identical by construction.</p>
+the cheapest preemptive hardening to offer; the four-way gate test should satisfy the correctness
+question quickly since the skip is bit-identical by construction.</p>
+<h4>Test cases added (2 tests, 6 cases)</h4>
+<ul>
+<li>A gate truth-table test covering all four combinations of "layer owns an indexer" × "speculative decoding on" — the remap is skipped only when the layer has no indexer and spec decode is off.</li>
+<li>A forward test with the Triton remap kernel mocked out: <code>forward_mqa</code> must launch the remap exactly once when the gate is on, and zero times when it is off.</li>
+<li>Confirms the shared top-k buffer object is kept as-is (same tensor, not replaced).</li>
+<li>Note: the config, workspace manager, and MLA kernel are all stubbed — these tests pin the gate contract, not real multi-layer numerics (that is covered by the e2e accuracy run).</li>
+</ul>
+</div>
+</details>
 
-<h3><a href="https://github.com/vllm-project/vllm/pull/50535">#50535</a> — AITER tuned GEMM for the MoE router gate</h3>
+<details class="pr-card">
+<summary><a href="https://github.com/vllm-project/vllm/pull/50535">#50535</a> — Use AITER tuned GEMM for the MoE router gate <span class="lk">5 reviewers assigned · awaiting review</span></summary>
+<div class="pr-body">
 <p class="finding"><b>What has happened:</b> the reviewer list has grown to five (mgoin, tjtanaa,
 pavanimajety, zyongye, AndreasKaratzas) but no inline comments yet. Rebased Aug 27.</p>
 <p class="finding"><b>What to expect:</b> this is the highest-value PR (+3.1% throughput) and the
 only one that changes numerics, so expect the most scrutiny when review lands: the
 bf16-under-force_fp32_compute question, the platform-vs-shape gating question, and possibly a
 request to extend unit-test M beyond 128. All answers are in the deep-dive tab.</p>
+<h4>Test cases added (3 tests, 81 cases on gfx950)</h4>
+<ul>
+<li>A reference test: the bf16 kernel output must track a float64 matmul within a peak-normalized tolerance — across 3 router shapes (GLM-5/5.2, DeepSeek-V3, Kimi-K2), 8 token counts from 1 to 128, and both fp32 and bf16 output dtypes.</li>
+<li>A routing test: top-8 expert selection must match the float64 reference over 5 random seeds — a swapped expert is allowed only if its logit is a genuine tie within the kernel's own error window.</li>
+<li>A fallback-equivalence test: the new path must stay close to the fp32 <code>F.linear</code> path it replaces, at token counts 1, 16, and 128.</li>
+<li>All tests skip unless ROCm + gfx950 + AITER tuned GEMM are available.</li>
+</ul>
+</div>
+</details>
 
 <h2>Older drafts needing a decision</h2>
 
-<h3><a href="https://github.com/vllm-project/vllm/pull/50008">#50008</a> — Drop redundant -inf prefill of decode paged MQA-logits buffer (draft)</h3>
+<details class="pr-card">
+<summary><a href="https://github.com/vllm-project/vllm/pull/50008">#50008</a> — Drop redundant -inf prefill of decode paged MQA-logits buffer <span class="lk">draft · stale since Jul 28</span></summary>
+<div class="pr-body">
 <p class="finding"><b>What it does / happened:</b> the early exploratory version of the decode-side
 fix — it removed the full-width fill entirely (+0/-1) and flagged its own risk: the FlyDSL kernel
 documents a -inf-prefill contract. Untouched since Jul 28.</p>
 <p class="finding"><b>What to expect:</b> close it in favor of 53789, which achieves the same win
 without violating the FlyDSL contract (bounded scrub instead of no scrub) and ships tests plus e2e
-numbers. Closing proactively keeps the queue clean and preempts the "is this still relevant?"
-review comment.</p>
+numbers. Closing proactively keeps the queue clean.</p>
+<h4>Test cases added</h4>
+<ul>
+<li>None — the test plan is an unchecked checklist, which is part of why 53789 supersedes it.</li>
+</ul>
+</div>
+</details>
 
-<h3><a href="https://github.com/vllm-project/vllm/pull/48051">#48051</a> — Don't re-quantize bf16 MLA kv_b_proj for GLM MoE DSA (draft)</h3>
+<details class="pr-card">
+<summary><a href="https://github.com/vllm-project/vllm/pull/48051">#48051</a> — Don't re-quantize bf16 MLA kv_b_proj for GLM MoE DSA <span class="lk">draft · likely superseded by #53123</span></summary>
+<div class="pr-body">
 <p class="finding"><b>What it does / happened:</b> a genuine accuracy-bug fix, not a perf PR: the
 ROCm AITER MLA path re-quantized intentionally-bf16 <code>kv_b_proj</code> weights to fp4/fp8
 (~11% error per attention layer), driving greedy decoding into repetition loops on GLM-5.2. The fix
@@ -235,6 +319,12 @@ comparison showing vLLM's default is the most aggressive.</p>
 <a href="https://github.com/vllm-project/vllm/pull/53123">#53123</a>, which disables the AITER
 FP8/FP4 BMM default globally — if that merges, this PR is superseded and should be closed or
 rescoped to just the GLM-specific guard. This needs a decision, not more code.</p>
+<h4>Test cases added</h4>
+<ul>
+<li>No unit tests — a manual end-to-end check only: greedy decode on GLM-5.2 previously looped forever repeating the question; with the fix it answers "Paris" and stops cleanly, with MLA weights confirmed bf16 and MoE experts still MXFP4.</li>
+</ul>
+</div>
+</details>
 
 </section>
 
