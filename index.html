@@ -106,23 +106,140 @@
 <div class="wrap">
 
 <h1>Review prep — vLLM ROCm perf PRs</h1>
-<p class="sub">Anticipated reviewer questions with suggested answers for PRs
-<a href="https://github.com/vllm-project/vllm/pull/50535">50535</a>,
-<a href="https://github.com/vllm-project/vllm/pull/51309">51309</a>,
-<a href="https://github.com/vllm-project/vllm/pull/51314">51314</a>,
-<a href="https://github.com/vllm-project/vllm/pull/51315">51315</a>
-(author amd-sriram).</p>
+<p class="sub">Open PRs by amd-sriram in vllm-project/vllm — current status (Aug 28) plus the
+deep-dive review prep for the four PRs from the earlier review round.</p>
 
 <div class="tabs">
-  <button class="tab active" data-tab="overview">Overview &amp; cross-PR</button>
+  <button class="tab active" data-tab="status">Status · Aug 28</button>
+  <button class="tab" data-tab="overview">Overview &amp; cross-PR</button>
   <button class="tab" data-tab="p50535">PR 50535 · Router GEMM</button>
   <button class="tab" data-tab="p51309">PR 51309 · Index remap</button>
   <button class="tab" data-tab="p51314">PR 51314 · Skip logits fill</button>
   <button class="tab" data-tab="p51315">PR 51315 · Fused indexer prologue</button>
 </div>
 
+<!-- ============================================================ STATUS -->
+<section class="panel active" id="status">
+
+<div class="stats">
+  <div class="stat"><div class="v">8</div><div class="l">Open PRs total</div></div>
+  <div class="stat"><div class="v good">2</div><div class="l">New this week (Aug 25)</div></div>
+  <div class="stat"><div class="v">4</div><div class="l">Reviewed, addressed, rebased Aug 27</div></div>
+  <div class="stat"><div class="v bad">2</div><div class="l">Older drafts needing a decision</div></div>
+</div>
+
+<h3>All open PRs at a glance</h3>
+<div class="table-frame"><table>
+  <tr><th>PR</th><th>Title</th><th>Opened</th><th>Review state</th></tr>
+  <tr><td><b><a href="https://github.com/vllm-project/vllm/pull/53789">53789</a></b></td><td>Bound the decode paged-MQA-logits sanitize to the top-k read region</td><td>Aug 25</td><td class="muted">New — awaiting first review</td></tr>
+  <tr><td><b><a href="https://github.com/vllm-project/vllm/pull/53792">53792</a></b></td><td>Resolve the indexer fp8 cache dtype once at import</td><td>Aug 25</td><td class="muted">New — awaiting first review</td></tr>
+  <tr><td><b><a href="https://github.com/vllm-project/vllm/pull/51315">51315</a></b></td><td>Fuse the DSA indexer prologue with AITER</td><td>Aug 6</td><td class="muted">Inline review received &amp; addressed; awaiting re-review</td></tr>
+  <tr><td><b><a href="https://github.com/vllm-project/vllm/pull/51314">51314</a></b></td><td>Skip cleaning sparse prefill MQA logits</td><td>Aug 6</td><td class="muted">e2e results requested &amp; added; awaiting code review</td></tr>
+  <tr><td><b><a href="https://github.com/vllm-project/vllm/pull/51309">51309</a></b></td><td>Skip redundant sparse index remap on non-indexer layers</td><td>Aug 6</td><td class="muted">Awaiting first human review</td></tr>
+  <tr><td><b><a href="https://github.com/vllm-project/vllm/pull/50535">50535</a></b></td><td>Use AITER tuned GEMM for the MoE router gate</td><td>Jul 31</td><td class="muted">5 reviewers assigned; awaiting first review</td></tr>
+  <tr><td><b><a href="https://github.com/vllm-project/vllm/pull/50008">50008</a></b></td><td>Drop redundant -inf prefill of decode paged MQA-logits buffer (draft)</td><td>Jul 27</td><td class="muted">Stale since Jul 28 — superseded by 53789</td></tr>
+  <tr><td><b><a href="https://github.com/vllm-project/vllm/pull/48051">48051</a></b></td><td>Don't re-quantize bf16 MLA kv_b_proj to fp4/fp8 for GLM MoE DSA (draft)</td><td>Jul 8</td><td class="muted">Discussed; likely superseded by #53123 default flip</td></tr>
+</table></div>
+
+<h2>New this week</h2>
+
+<h3><a href="https://github.com/vllm-project/vllm/pull/53789">#53789</a> — Bound the decode paged-MQA-logits sanitize to the top-k read region <span class="pill">+239 / -1</span></h3>
+<p class="finding"><b>What it does:</b> since upstream #49714, every decode step scrubbed NaN/Inf
+from the entire <code>[rows × max_model_len]</code> logits workspace — 258,048 columns on GLM-5.2,
+43 µs per call no matter how short the context. This PR scrubs only the front window the top-k
+actually reads, using a small Triton kernel, and keeps plain <code>nan_to_num_</code> below 10M
+elements where a kernel launch costs more than it saves. It is the decode-side sibling of 51314's
+prefill fix — and the safe, tested successor to the older draft #50008, which dropped the fill
+entirely.</p>
+<p class="finding"><b>What has happened:</b> opened Aug 25 with a full e2e sweep and 9 passing unit
+tests on MI355X (correct window, untouched tail, exact NaN/Inf mapping, fallback crossover, static
+launch grid for CUDA-graph safety). Per-call sanitize time drops 43.1 → 4.6 µs (426 → 52 ms per
+run; 1.82% → 0.21% of GPU kernel time); throughput +3.2% at concurrency 256, +0.6% geomean. No
+human review yet; rebased Aug 27.</p>
+<p class="finding"><b>What to expect:</b> questions on the 10M-element crossover heuristic (how was
+it chosen, is it hardware-dependent), confirmation that the launch grid depends only on shapes so
+CUDA-graph capture stays valid, and "why not fix the #49714 scrub upstream for all platforms
+instead". Also expect a request to close #50008 now that this supersedes it.</p>
+
+<h3><a href="https://github.com/vllm-project/vllm/pull/53792">#53792</a> — Resolve the indexer fp8 cache dtype once at import <span class="pill">+9 / -11</span></h3>
+<p class="finding"><b>What it does:</b> pure cleanup, no behavior change. <code>current_platform.fp8_dtype()</code>
+cannot change after import, but the sparse-MLA module called it on every function invocation — once
+per DSA layer per forward pass, including inside the fused prologue op from 51315. Upstream #46172
+added a module-level <code>FP8_DTYPE</code> constant but only wired 2 of 7 call sites; this routes
+the remaining 5 through it, leaving exactly one lookup at import time.</p>
+<p class="finding"><b>What has happened:</b> opened Aug 25, rebased Aug 27. No review activity yet
+beyond the bots.</p>
+<p class="finding"><b>What to expect:</b> a quick approve is realistic — it finishes what an
+already-merged PR started. The only plausible questions: "can fp8_dtype ever differ after import"
+(no — the platform is fixed for the process) and "why no new test" (no behavior change; existing
+decode tests cover every call path).</p>
+
+<h2>The four reviewed PRs — what changed since the last analysis</h2>
+
+<h3><a href="https://github.com/vllm-project/vllm/pull/51315">#51315</a> — Fused DSA indexer prologue</h3>
+<p class="finding"><b>What has happened:</b> got its first substantive inline review — Rohan138
+(collaborator, Aug 19) asked to move the custom-op impl/fake pair into <code>_aiter_ops.py</code>
+to keep AITER imports centralized. Addressed Aug 24: both functions moved, the AITER import now
+lives in the function body matching the existing <code>_rocm_aiter_fp8_attn_impl</code> pattern,
+and the kernel getter stayed local for consistency with <code>_get_aiter_topk_ops()</code>. Rebased
+Aug 27.</p>
+<p class="finding"><b>What to expect:</b> Rohan138 resolving the thread, then code-owner review
+(tjtanaa / AndreasKaratzas). The prefill-slower-by-65% question from the deep-dive tab is still the
+main technical exposure; the refactor response also demonstrates the codebase-convention awareness
+reviewers look for.</p>
+
+<h3><a href="https://github.com/vllm-project/vllm/pull/51314">#51314</a> — Skip cleaning sparse prefill MQA logits</h3>
+<p class="finding"><b>What has happened:</b> Fangzhou-Ai requested model-level e2e perf and
+accuracy (Aug 9); the full serving sweep and accuracy tables were added Aug 10. No inline code
+review yet. Rebased Aug 27.</p>
+<p class="finding"><b>What to expect:</b> first full code review still pending. The
+<code>clean_logits</code> kwarg-guard question and the RULER variance explanation (0.870 → 0.838,
+outside the stated ±0.02) remain the two answers to have ready. Note the new sibling 53789 now
+demonstrates the same idea on the decode side with a bounded scrub — a useful consistency story.</p>
+
+<h3><a href="https://github.com/vllm-project/vllm/pull/51309">#51309</a> — Skip redundant sparse index remap</h3>
+<p class="finding"><b>What has happened:</b> no human review yet — only bot activity and steady
+rebases (latest Aug 27). The gate unit tests and e2e A/B are unchanged from the earlier
+analysis.</p>
+<p class="finding"><b>What to expect:</b> first review. The layer-0-owns-an-indexer assert remains
+the cheapest preemptive hardening to offer; the four-way gate test (indexer × speculative) should
+satisfy the correctness question quickly since the skip is bit-identical by construction.</p>
+
+<h3><a href="https://github.com/vllm-project/vllm/pull/50535">#50535</a> — AITER tuned GEMM for the MoE router gate</h3>
+<p class="finding"><b>What has happened:</b> the reviewer list has grown to five (mgoin, tjtanaa,
+pavanimajety, zyongye, AndreasKaratzas) but no inline comments yet. Rebased Aug 27.</p>
+<p class="finding"><b>What to expect:</b> this is the highest-value PR (+3.1% throughput) and the
+only one that changes numerics, so expect the most scrutiny when review lands: the
+bf16-under-force_fp32_compute question, the platform-vs-shape gating question, and possibly a
+request to extend unit-test M beyond 128. All answers are in the deep-dive tab.</p>
+
+<h2>Older drafts needing a decision</h2>
+
+<h3><a href="https://github.com/vllm-project/vllm/pull/50008">#50008</a> — Drop redundant -inf prefill of decode paged MQA-logits buffer (draft)</h3>
+<p class="finding"><b>What it does / happened:</b> the early exploratory version of the decode-side
+fix — it removed the full-width fill entirely (+0/-1) and flagged its own risk: the FlyDSL kernel
+documents a -inf-prefill contract. Untouched since Jul 28.</p>
+<p class="finding"><b>What to expect:</b> close it in favor of 53789, which achieves the same win
+without violating the FlyDSL contract (bounded scrub instead of no scrub) and ships tests plus e2e
+numbers. Closing proactively keeps the queue clean and preempts the "is this still relevant?"
+review comment.</p>
+
+<h3><a href="https://github.com/vllm-project/vllm/pull/48051">#48051</a> — Don't re-quantize bf16 MLA kv_b_proj for GLM MoE DSA (draft)</h3>
+<p class="finding"><b>What it does / happened:</b> a genuine accuracy-bug fix, not a perf PR: the
+ROCm AITER MLA path re-quantized intentionally-bf16 <code>kv_b_proj</code> weights to fp4/fp8
+(~11% error per attention layer), driving greedy decoding into repetition loops on GLM-5.2. The fix
+skips that quantization for the GLM MoE DSA architecture, matching SGLang. fxmarty-amd reviewed in
+depth, questioning why the FP8/FP4 BMM env flags are on by default at all, with an SGLang
+comparison showing vLLM's default is the most aggressive.</p>
+<p class="finding"><b>What to expect:</b> the discussion has moved to
+<a href="https://github.com/vllm-project/vllm/pull/53123">#53123</a>, which disables the AITER
+FP8/FP4 BMM default globally — if that merges, this PR is superseded and should be closed or
+rescoped to just the GLM-specific guard. This needs a decision, not more code.</p>
+
+</section>
+
 <!-- ============================================================ OVERVIEW -->
-<section class="panel active" id="overview">
+<section class="panel" id="overview">
 
 <div class="stats">
   <div class="stat"><div class="v good">+3.1%</div><div class="l">50535 · output throughput (geomean, 16 pts)</div></div>
